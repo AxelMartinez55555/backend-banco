@@ -28,7 +28,11 @@ public class BancoController {
 
         if (usuario != null) {
             String rfcReal = usuario.get("_id").toString();
-            return Map.of("exito", true, "mensaje", "Login correcto", "rfc", rfcReal);
+            String rol = "CLIENTE";
+            if (usuario.get("rol") != null) {
+                rol = usuario.get("rol").toString().toUpperCase();
+            }
+            return Map.of("exito", true, "mensaje", "Login correcto", "rfc", rfcReal, "rol", rol);
         } else {
             return Map.of("exito", false, "mensaje", "RFC no encontrado en la base de datos");
         }
@@ -56,6 +60,17 @@ public class BancoController {
             return Map.of("exito", true, "nombre", nombre, "saldo", saldoReal);
         } else {
             return Map.of("exito", false, "mensaje", "Usuario no encontrado");
+        }
+    }
+
+    // --- NUEVO: OBTENER TODOS LOS USUARIOS PARA EL ADMIN ---
+    @GetMapping("/usuarios")
+    public Map<String, Object> obtenerTodosUsuarios() {
+        try {
+            List<Map> usuarios = mongoTemplate.findAll(Map.class, "usuarios");
+            return Map.of("exito", true, "usuarios", usuarios);
+        } catch (Exception e) {
+            return Map.of("exito", false, "mensaje", "Error al obtener usuarios: " + e.getMessage());
         }
     }
 
@@ -149,18 +164,14 @@ public class BancoController {
         }
     }
 
-    // --- C DE CRUD: Crear Cuenta con esquema completo ---
     @PostMapping("/crear")
     public Map<String, Object> crearCuenta(@RequestBody Map<String, Object> datos) {
         try {
             String rfc = datos.get("rfc").toString().trim().toUpperCase();
-            
-            // 1. Verificamos si el RFC ya existe
             BasicQuery buscarUsuario = new BasicQuery("{\"_id\": {\"$regex\": \"^" + rfc + "$\", \"$options\": \"i\"}}");
             Map existe = mongoTemplate.findOne(buscarUsuario, Map.class, "usuarios");
             if (existe != null) return Map.of("exito", false, "mensaje", "Este RFC ya tiene una cuenta.");
 
-            // 2. Extraer datos recibidos
             String nombre = datos.getOrDefault("nombre", "").toString();
             String apellidos = datos.getOrDefault("apellidos", "").toString();
             String calleNum = datos.getOrDefault("calle_num", "").toString();
@@ -171,7 +182,6 @@ public class BancoController {
             String tipo = datos.getOrDefault("tipo", "F").toString();
             double saldoInicial = Double.parseDouble(datos.get("saldo").toString());
 
-            // 3. Crear el arreglo de cuentas (Array)
             int numeroCuentaGenerado = (int) (Math.random() * 90000000) + 10000000;
             Map<String, Object> nuevaCuenta = new HashMap<>();
             nuevaCuenta.put("saldo", saldoInicial);
@@ -180,7 +190,6 @@ public class BancoController {
             List<Map<String, Object>> listaCuentas = new ArrayList<>();
             listaCuentas.add(nuevaCuenta);
 
-            // 4. Crear el documento principal de usuario
             Map<String, Object> nuevoUsuario = new HashMap<>();
             nuevoUsuario.put("_id", rfc);
             nuevoUsuario.put("nombre", nombre);
@@ -191,12 +200,11 @@ public class BancoController {
             nuevoUsuario.put("municipio", municipio);
             nuevoUsuario.put("telefono", telefono);
             nuevoUsuario.put("tipo", tipo);
-            nuevoUsuario.put("rol", "CLIENTE"); 
+            nuevoUsuario.put("rol", "CLIENTE"); // Por defecto todos nacen como clientes
             nuevoUsuario.put("cuentas", listaCuentas);
 
             mongoTemplate.save(nuevoUsuario, "usuarios");
 
-            // 5. Guardar el movimiento de apertura
             Map<String, Object> nuevoMovimiento = new HashMap<>();
             nuevoMovimiento.put("tipo", "D");
             nuevoMovimiento.put("monto", saldoInicial);
@@ -212,7 +220,6 @@ public class BancoController {
         }
     }
 
-    // --- D DE CRUD: Eliminar Cuenta ---
     @PostMapping("/eliminar")
     public Map<String, Object> eliminarCuenta(@RequestBody Map<String, String> datos) {
         try {
